@@ -37,6 +37,9 @@ RUN apk add --no-cache \
 WORKDIR /etc/ocserv
 
 COPY --from=builder /usr/local/sbin/ocserv /usr/local/sbin/ocserv
+COPY --from=builder /usr/local/sbin/ocserv-worker /usr/local/sbin/ocserv-worker
+COPY --from=builder /usr/local/bin/occtl /usr/local/sbin/occtl
+COPY --from=builder /usr/local/bin/ocpasswd /usr/local/sbin/ocpasswd
 COPY --from=ghcr.io/ufoscout/docker-compose-wait:latest /wait /wait
 COPY docker-entrypoint.sh /entrypoint.sh
 
