@@ -187,7 +187,6 @@ if [[ ! -f "/etc/ocserv/server-cert.pem" ]] && [[ ! -f "/etc/ocserv/certs/priv-f
 			--dns-cloudflare-credentials /etc/ocserv/cloudflare.ini \
 			-d $DOMAIN \
 			--register-unsafely-without-email
-			fi
 		else
 			certbot certonly --standalone --non-interactive --agree-tos \
 			-d $DOMAIN \
