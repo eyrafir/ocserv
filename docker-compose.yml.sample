@@ -4,21 +4,20 @@ services:
     container_name: ocserv
     environment:
       - DOMAIN=${DOMAIN}
-      - EMAIL=${EMAIL}            # OPTIONAL, only for cert expiration remind
       - USERNAME=${USERNAME}      # OPTIONAL, will be generated auto if not set
       - PASSWORD=${USERPASS}      # OPTIONAL, will be generated auto if not set
       # - WAIT_TIMEOUT=           # OPTIONAL, default 30s, wait for file / host / container to be ready
       # - WAIT_HOSTS=             # OPTIONAL, comma separated list of hostnames to wait for
       # - WAIT_PATHS=             # OPTIONAL, comma separated list of paths to wait for
+      # - FORWARD_PROXY_IP=       # OPTIONAL, IP of dnsmasq + sniproxy server
     networks:
       - ipv6
     ports:
       - 80:80 # for certbot obtain cert via http, no need when you use dns
       - 443:443
-    # volumes:
-    #   - ./config:/etc/ocserv
-    #   - ./letsencrypt:/etc/letsencrypt
-    #   - <your-cloudflare-dns-conf>:/etc/ocserv/cloudflare.ini
+    volumes:
+      - ./config:/etc/ocserv
+      - ./certs:/etc/ocserv/certs
     sysctls:
       - net.ipv4.ip_forward=1
       - net.ipv6.conf.all.forwarding=1

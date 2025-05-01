@@ -1,20 +1,21 @@
-FROM ubuntu:rolling
+FROM alpine:latest
 LABEL maintainer="Hu Xiaohong <xiaohong@pandas.run>"
 
 ENV URL="https://www.infradead.org/ocserv/download/"
+ENV BUILD_DEPS=" \
+  make gcc coreutils build-base build-base \
+  xz gawk pkgconfig nettle-dev gnutls-dev \
+  libev-dev readline-dev lz4-dev libseccomp-dev \
+  oath-toolkit-dev libnl3-dev talloc-dev http-parser-dev \
+  radcli-dev linux-pam-dev krb5-dev protobuf-c-dev"
+
+RUN apk add --no-cache \
+  bash curl ${BUILD_DEPS} \
+  certbot certbot-dns-cloudflare iptables ipcalc
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN set -x \
-  && apt-get update && apt-get install -y curl make gcc coreutils \
-  && apt-get install --no-install-recommends -y \
-    xz-utils gawk pkg-config nettle-dev gnutls-bin \
-    libgnutls28-dev libprotobuf-c-dev libev-dev \
-    libreadline-dev liblz4-dev libseccomp-dev liboath-dev \
-    libnl-3-dev libtalloc-dev libhttp-parser-dev \
-    libradcli-dev libpam0g-dev libkrb5-dev \
-    certbot python3-certbot-dns-cloudflare cron iptables \
-    ipcalc-ng \
   && curl -sL "${URL}" | \
     grep -oE 'ocserv-([0-9]{1,}\.)+[0-9]{1,}\.tar\.xz' | \
     sort -V | tail -n1 | \
@@ -23,8 +24,8 @@ RUN set -x \
   && ./configure \
   && make && make install && make clean \
   && cd .. && rm -rf ocserv-* ocserv.tar.xz \
-  && apt-get -y remove --auto-remove --purge make gcc \
-  && rm -rf /var/lib/apt/lists/* \
+  && apk del --purge ${BUILD_DEPS} \
+  && rm -rf /var/cache/apk/* \
   && rm -rf /etc/ocserv/ocserv.conf
 
 WORKDIR /etc/ocserv

@@ -56,7 +56,7 @@ if [[ ! -f $OCSERV_CONF ]]; then
 	# to be able to assign the local part of the tun device address).
 	# Note that, you could use addresses from a subnet of your LAN network if you
 	# enable [proxy arp in the LAN interface](http://ocserv.openconnect-vpn.net/recipes-ocserv-pseudo-bridge.html);
-	ipv4-network = 172.20.0.0/24
+	ipv4-network = 192.168.199.0/24
 	ipv4-netmask = 255.255.255.0
 	ipv6-network = 2001:db8:2::/64
 	ipv6-subnet-prefix = 112
@@ -75,12 +75,10 @@ if [[ ! -f $OCSERV_CONF ]]; then
 
 	tunnel-all-dns = true
 
-	dns = 1.1.1.1
-	dns = 2606:4700:4700::1111
-	dns = 2606:4700:4700::1001
 	dns = 8.8.8.8
 	dns = 2001:4860:4860::8888
-	dns = 2001:4860:4860::8844
+	dns = 1.1.1.1
+	dns = 2606:4700:4700::1111
 
 	# custom config file must as same as username or groupname
 	config-per-user = /etc/ocserv/config-per-user/
@@ -131,8 +129,12 @@ if [[ ! -f $OCSERV_CONF ]]; then
 
 fi
 
+mkdir -p /etc/letsencrypt/live/$DOMAIN
+mkdir -p /etc/ocserv/
+ln -s /etc/ocserv/certs/ /etc/letsencrypt/live/$DOMAIN
+
 # Create certs if no certs are provided
-if [[ ! -f "/etc/ocserv/server-cert.pem" ]] && [[ ! -f "/etc/letsencrypt/live/$DOMAIN/priv-fullchain-bundle.pem" ]]; then
+if [[ ! -f "/etc/ocserv/server-cert.pem" ]] && [[ ! -f "/etc/ocserv/certs/priv-fullchain-bundle.pem" ]]; then
 
 	# Remove existing server-cert and server-key lines if they exist
 	sed -i '/^server-cert =/d' $OCSERV_CONF
@@ -181,27 +183,15 @@ if [[ ! -f "/etc/ocserv/server-cert.pem" ]] && [[ ! -f "/etc/letsencrypt/live/$D
 
 		# Create letsencrypt certificate
 		if [[ -f "/etc/ocserv/cloudflare.ini" ]]; then
-			if [[ -z $EMAIL ]]; then
-				certbot certonly --dns-cloudflare --non-interactive --agree-tos \
-				--dns-cloudflare-credentials /etc/ocserv/cloudflare.ini \
-				-d $DOMAIN \
-				--register-unsafely-without-email
-			else
-				certbot certonly --dns-cloudflare --non-interactive --agree-tos \
-				--dns-cloudflare-credentials /etc/ocserv/cloudflare.ini \
-				-d $DOMAIN \
-				--email $EMAIL
+			certbot certonly --dns-cloudflare --non-interactive --agree-tos \
+			--dns-cloudflare-credentials /etc/ocserv/cloudflare.ini \
+			-d $DOMAIN \
+			--register-unsafely-without-email
 			fi
 		else
-			if [[ -z $EMAIL ]]; then
-				certbot certonly --standalone --non-interactive --agree-tos \
-				-d $DOMAIN \
-				--register-unsafely-without-email
-			else
-				certbot certonly --standalone --non-interactive --agree-tos \
-				-d $DOMAIN \
-				--email $EMAIL
-			fi
+			certbot certonly --standalone --non-interactive --agree-tos \
+			-d $DOMAIN \
+			--register-unsafely-without-email
 		fi
 
 		cron_file="/var/spool/cron/crontabs/root"
@@ -224,8 +214,8 @@ if ! grep -Fxq "server-cert =" $OCSERV_CONF && ! grep -Fxq "server-key =" $OCSER
 		echo "$cert_config" >> $OCSERV_CONF
 		echo "$key_config" >> $OCSERV_CONF
 	else
-		cert_config="server-cert = /etc/letsencrypt/live/$DOMAIN/priv-fullchain-bundle.pem"
-		key_config="server-key = /etc/letsencrypt/live/$DOMAIN/priv-fullchain-bundle.pem"
+		cert_config="server-cert = /etc/ocserv/certs/priv-fullchain-bundle.pem"
+		key_config="server-key = /etc/ocserv/certs/priv-fullchain-bundle.pem"
 		echo "$cert_config" >> $OCSERV_CONF
 		echo "$key_config" >> $OCSERV_CONF
 	fi
@@ -253,10 +243,18 @@ fi
 # Enable NAT forwarding
 # if you want to specific translate ip, uncomment the following line, -j MASQUERADE is dynamic way
 # iptables -t nat -A POSTROUTING -s 172.20.0.0/24 -j SNAT --to-source $(hostname -I)
-iptables -t nat -A POSTROUTING -s 172.20.0.0/24 -j MASQUERADE
+iptables -t nat -A POSTROUTING -s 192.168.199.0/24 -j MASQUERADE
 ip6tables -t nat -A POSTROUTING -s 2001:db8:2::/64 -j MASQUERADE
 iptables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
 ip6tables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+
+if [ -n "$FORWARD_PROXY_IP" ]; then
+	echo "Detected FORWARD_PROXY_IP=$FORWARD_PROXY_IP, applying iptables DNAT rule..."
+	iptables -t nat -A PREROUTING -i tun0 -p tcp -m multiport --dports 80,443 \
+		-j DNAT --to-destination "$FORWARD_PROXY_IP"
+else
+	echo "No FORWARD_PROXY_IP set. Skipping DNAT rules."
+fi
 
 # Enable TUN device
 mkdir -p /dev/net
