@@ -32,7 +32,7 @@ RUN apk add --no-cache \
   bash curl gnutls nettle libev talloc \
   linux-pam krb5 oath-toolkit-liboath libnl3 \
   libseccomp radcli certbot certbot-dns-cloudflare \
-  iptables ipcalc protobuf-c
+  iptables ipcalc protobuf-c lz4
 
 WORKDIR /etc/ocserv
 
