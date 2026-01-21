@@ -1,4 +1,4 @@
-FROM alpine:latest
+FROM alpine:latest AS builder
 
 ENV URL="https://www.infradead.org/ocserv/download/"
 ENV BUILD_DEPS="\
