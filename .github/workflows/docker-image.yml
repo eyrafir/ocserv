@@ -12,27 +12,36 @@ on:
 
 jobs:
   docker:
+    name: Build & Deploy
     runs-on: ubuntu-latest
+    if: github.repository_owner == 'eyrafir'
+    
     steps:
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@v4
-      -
-        name: Set up QEMU
+        
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-      -
-        name: Set up Docker Buildx
+        
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      -
-        name: Login to Docker Hub
+        
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
-        name: Build and push
-        uses: docker/build-push-action@v5
+
+      - name: Set release tag
+        run: echo "RELEASE=dev-$(date +%Y%m%d%H%M%S)" >> $GITHUB_ENV
+
+      - name: Build & Publish Docker Image
+        uses: docker/build-push-action@v6
         with:
-          context: .
           push: true
-          tags: eyrafir/ocserv:latest
+          context: .
+          #platforms: linux/amd64,linux/arm64/v8
+          platforms: linux/amd64,linux/arm64/v8,linux/arm/v7,linux/arm/v6
+          tags: |
+            eyrafir/ocserv:${{ env.RELEASE }}
+            eyrafir/ocserv:latest
