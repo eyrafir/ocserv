@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# Wait for hosts or files to be available before starting
-if [[ -n "$WAIT_HOSTS" ]] || [[ -n "$WAIT_PATHS" ]]; then
-	/wait
-fi
-
 OCSERV_CONF="/etc/ocserv/ocserv.conf"
 
 # Create init config
@@ -56,29 +51,13 @@ if [[ ! -f $OCSERV_CONF ]]; then
 	# to be able to assign the local part of the tun device address).
 	# Note that, you could use addresses from a subnet of your LAN network if you
 	# enable [proxy arp in the LAN interface](http://ocserv.openconnect-vpn.net/recipes-ocserv-pseudo-bridge.html);
-	ipv4-network = 192.168.199.0/24
+	ipv4-network = 10.255.189.0/24
 	ipv4-netmask = 255.255.255.0
-	ipv6-network = 2001:db8:2::/64
-	ipv6-subnet-prefix = 112
-
 	route = default
-	no-route = 10.0.0.0/8
-	no-route = 100.64.0.0/10
-	no-route = 169.254.0.0/16
-	no-route = 192.0.0.0/24
-	no-route = 192.168.0.0/16
-	no-route = 224.0.0.0/24
-	no-route = 240.0.0.0/4
-	no-route = 172.16.0.0/12
-	no-route = 127.0.0.0/8
-	no-route = 255.255.255.255/32
-
 	tunnel-all-dns = true
 
 	dns = 8.8.8.8
-	dns = 2001:4860:4860::8888
 	dns = 1.1.1.1
-	dns = 2606:4700:4700::1111
 
 	# custom config file must as same as username or groupname
 	config-per-user = /etc/ocserv/config-per-user/
@@ -109,7 +88,7 @@ if [[ ! -f $OCSERV_CONF ]]; then
 	# Enable camouflage feature that make vpn service look like a web server.
 	# Connection to the vpn can be established only if the client provided a specific secret string,
 	# other wise the server will return HTTP error for all requests.
-	camouflage = false
+	camouflage = true
 
 	# The URL prefix that should be set on the client (after '?' sign) to pass through the camouflage check,
 	# e.g. in case of 'mysecretkey', the server URL on the client should be like "https://example.com/?mysecretkey".
@@ -129,96 +108,8 @@ if [[ ! -f $OCSERV_CONF ]]; then
 
 fi
 
-mkdir -p /etc/letsencrypt/live/$DOMAIN
-mkdir -p /etc/ocserv/
-ln -s /etc/ocserv/certs/ /etc/letsencrypt/live/$DOMAIN
+#mkdir -p /etc/ocserv/
 
-# Create certs if no certs are provided
-if [[ ! -f "/etc/ocserv/server-cert.pem" ]] && [[ ! -f "/etc/ocserv/certs/priv-fullchain-bundle.pem" ]]; then
-
-	# Remove existing server-cert and server-key lines if they exist
-	sed -i '/^server-cert =/d' $OCSERV_CONF
-	sed -i '/^server-key =/d' $OCSERV_CONF
-
-	IPV4=$(timeout 3 curl -s https://ipinfo.io/ip || echo "")
-	IPV6=$(timeout 3 curl -s https://6.ipinfo.io/ip || echo "")
-	if [[ -z $DOMAIN ]]; then
-
-		# Create self signed certificate
-		CN="vpn.example.com"
-		ORG="Organization"
-		DAYS=3650
-		if [[ -z "$IPV4" ]] && [[ -z "$IPV6" ]]; then
-			echo "Failed to get public IP address"
-			exit 1
-		fi
-
-		certtool --generate-privkey --outfile ca-key.pem
-		cat > ca.tmpl <<-EOCA
-		cn = "$CN"
-		organization = "$ORG"
-		serial = 1
-		expiration_days = $DAYS
-		ca
-		signing_key
-		cert_signing_key
-		crl_signing_key
-		EOCA
-		certtool --generate-self-signed --load-privkey ca-key.pem --template ca.tmpl --outfile ca.pem
-		certtool --generate-privkey --outfile server-key.pem
-		cat > server.tmpl <<-EOSRV
-		cn = "$CN"
-		organization = "$ORG"
-		serial = 2
-		expiration_days = $DAYS
-		signing_key
-		encryption_key
-		tls_www_server
-		# dns_name = "<your-hostname>"
-		ip_address = "${IPV4:-$IPV6}"
-		EOSRV
-		certtool --generate-certificate --load-privkey server-key.pem --load-ca-certificate ca.pem --load-ca-privkey ca-key.pem --template server.tmpl --outfile server-cert.pem
-
-	else
-
-		# Create letsencrypt certificate
-		if [[ -f "/etc/ocserv/cloudflare.ini" ]]; then
-			certbot certonly --dns-cloudflare --non-interactive --agree-tos \
-			--dns-cloudflare-credentials /etc/ocserv/cloudflare.ini \
-			-d $DOMAIN \
-			--register-unsafely-without-email
-		else
-			certbot certonly --standalone --non-interactive --agree-tos \
-			-d $DOMAIN \
-			--register-unsafely-without-email
-		fi
-
-		cron_file="/var/spool/cron/crontabs/root"
-		cron_config='15 00 * * * certbot renew --quiet && systemctl restart ocserv'
-		if ! grep -Fxq "$cron_config" $cron_file; then
-			echo "$cron_config" >> $cron_file
-		fi
-		service cron restart
-	fi
-fi
-
-if ! grep -Fxq "server-cert =" $OCSERV_CONF && ! grep -Fxq "server-key =" $OCSERV_CONF; then
-	# Remove existing server-cert and server-key lines if they exist
-	sed -i '/^server-cert =/d' $OCSERV_CONF
-	sed -i '/^server-key =/d' $OCSERV_CONF
-
-	if [[ -z $DOMAIN ]]; then
-		cert_config="server-cert = /etc/ocserv/server-cert.pem"
-		key_config="server-key = /etc/ocserv/server-key.pem"
-		echo "$cert_config" >> $OCSERV_CONF
-		echo "$key_config" >> $OCSERV_CONF
-	else
-		cert_config="server-cert = /etc/ocserv/certs/priv-fullchain-bundle.pem"
-		key_config="server-key = /etc/ocserv/certs/priv-fullchain-bundle.pem"
-		echo "$cert_config" >> $OCSERV_CONF
-		echo "$key_config" >> $OCSERV_CONF
-	fi
-fi
 
 # Create random initial user if no PAM user file is provided
 if [[ ! -f "/etc/ocserv/ocpasswd" ]]; then
@@ -239,21 +130,8 @@ if [[ ! -f "/etc/ocserv/ocpasswd" ]]; then
 
 fi
 
-# Enable NAT forwarding
-# if you want to specific translate ip, uncomment the following line, -j MASQUERADE is dynamic way
-# iptables -t nat -A POSTROUTING -s 172.20.0.0/24 -j SNAT --to-source $(hostname -I)
-iptables -t nat -A POSTROUTING -s 192.168.199.0/24 -j MASQUERADE
-ip6tables -t nat -A POSTROUTING -s 2001:db8:2::/64 -j MASQUERADE
-iptables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
-ip6tables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
 
-if [ -n "$FORWARD_PROXY_IP" ]; then
-	echo "Detected FORWARD_PROXY_IP=$FORWARD_PROXY_IP, applying iptables DNAT rule..."
-	iptables -t nat -A PREROUTING -i tun0 -p tcp -m multiport --dports 80,443 \
-		-j DNAT --to-destination "$FORWARD_PROXY_IP"
-else
-	echo "No FORWARD_PROXY_IP set. Skipping DNAT rules."
-fi
+iptables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
 
 # Enable TUN device
 mkdir -p /dev/net
