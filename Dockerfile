@@ -1,5 +1,4 @@
-FROM alpine:latest AS builder
-LABEL maintainer="Hu Xiaohong <xiaohong@pandas.run>"
+FROM alpine:latest
 
 ENV URL="https://www.infradead.org/ocserv/download/"
 ENV BUILD_DEPS="\
@@ -25,7 +24,6 @@ RUN set -x \
 
 # Final runtime stage
 FROM alpine:latest
-LABEL maintainer="Hu Xiaohong <xiaohong@pandas.run>"
 
 # Runtime deps only
 RUN apk add --no-cache \
